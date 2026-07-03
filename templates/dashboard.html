@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard IOT - Controle AC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 p-4 md:p-8 font-sans min-h-screen">
+    
+    <div class="max-w-5xl mx-auto space-y-6">
+        
+        <!-- 1. CABEÇALHO DE CONTROLE -->
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div class="flex items-center gap-6 flex-wrap justify-center w-full md:w-auto">
+                
+                <div class="flex flex-col">
+                    <label class="text-xs text-red-400 font-bold mb-1 uppercase">Max (Ligar AC)</label>
+                    <input type="number" id="ui_temp_max" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none">
+                </div>
+
+                <div class="flex flex-col">
+                    <label class="text-xs text-blue-400 font-bold mb-1 uppercase">Min (Desligar)</label>
+                    <input type="number" id="ui_temp_min" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none">
+                </div>
+
+                <div class="flex flex-col">
+                    <label class="text-xs text-emerald-400 font-bold mb-1 uppercase">Alvo (IR)</label>
+                    <input type="number" id="ui_temp_alvo" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none">
+                </div>
+
+                <div class="flex flex-col flex-1 min-w-[150px]">
+                    <label class="text-xs text-slate-400 font-bold mb-1 uppercase">Marca Ativa</label>
+                    <select id="ui_marca" class="bg-slate-900 text-white rounded-lg px-3 py-3 border border-slate-700 outline-none w-full">
+                        <option value="LG">LG</option>
+                        <option value="SAMSUNG">SAMSUNG</option>
+                        <option value="MIDEA">MIDEA</option>
+                    </select>
+                </div>
+            </div>
+
+            <button onclick="salvarConfiguracao()" class="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+                Aplicar ao ESP32
+            </button>
+        </div>
+
+        <!-- 2. GRÁFICO E LOGS -->
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg h-96">
+            <canvas id="temperaturaChart"></canvas>
+        </div>
+
+        <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 h-64 overflow-y-auto font-mono text-sm" id="logs_container">
+            <div class="text-slate-500">Carregando telemetria...</div>
+        </div>
+    </div>
+
+    <script>
+        let graficoTemp;
+
+        function inicializarGrafico() {
+            const ctx = document.getElementById('temperaturaChart').getContext('2d');
+            graficoTemp = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: '#10b981', fill: true }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // Busca a configuração atual que o ESP32 está usando
+        async function carregarDadosAtuais() {
+            const res = await fetch('/api/getConfig');
+            if (res.ok) {
+                const config = await res.json();
+                document.getElementById('ui_temp_max').value = config.alerta;
+                document.getElementById('ui_temp_min').value = config.desligar;
+                document.getElementById('ui_temp_alvo').value = config.alvo;
+                document.getElementById('ui_marca').value = config.marca;
+            }
+        }
+
+        // Salva a nova configuração no catálogo e define como estado atual
+        async function salvarConfiguracao() {
+            const marca = document.getElementById('ui_marca').value;
+            const payloadConfig = {
+                marca: marca,
+                temp_max: parseInt(document.getElementById('ui_temp_max').value),
+                temp_min: parseInt(document.getElementById('ui_temp_min').value),
+                temp_alvo: parseInt(document.getElementById('ui_temp_alvo').value)
+            };
+
+            // 1. Atualiza o catálogo
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payloadConfig)
+            });
+
+            // 2. Define esta marca como a ativa
+            await fetch('/api/estado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ marca: marca })
+            });
+
+            alert("Configuração aplicada com sucesso!");
+        }
+
+        async function carregarLogs() {
+            const res = await fetch('/api/logs');
+            if (res.ok) {
+                const logs = await res.json();
+                document.getElementById('logs_container').innerHTML = logs.map(l => 
+                    `<div>[${l.timestamp}] ${l.log}</div>`
+                ).join('');
+            }
+        }
+
+        window.onload = () => {
+            inicializarGrafico();
+            carregarDadosAtuais();
+            carregarLogs();
+            setInterval(carregarLogs, 5000);
+        };
+    </script>
+</body>
+</html>

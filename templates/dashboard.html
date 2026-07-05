@@ -1,41 +1,51 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-PT">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard IOT - Controle AC</title>
+    <title>Dashboard IOT - Monitoramento AC</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 p-4 md:p-8 font-sans min-h-screen">
     
-    <div class="max-w-5xl mx-auto space-y-6">
+    <div class="max-w-6xl mx-auto space-y-6">
         
-        <!-- 1. CABEÇALHO DE CONTROLE -->
+        <!-- 1. CABEÇALHO DE CONTROLO -->
         <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg flex flex-col md:flex-row gap-4 items-center justify-between">
             <div class="flex items-center gap-6 flex-wrap justify-center w-full md:w-auto">
                 
                 <div class="flex flex-col">
                     <label class="text-xs text-red-400 font-bold mb-1 uppercase">Max (Ligar AC)</label>
-                    <input type="number" id="ui_temp_max" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none">
+                    <input type="number" id="ui_temp_max" step="0.5" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none focus:border-red-500">
                 </div>
 
                 <div class="flex flex-col">
                     <label class="text-xs text-blue-400 font-bold mb-1 uppercase">Min (Desligar)</label>
-                    <input type="number" id="ui_temp_min" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none">
+                    <input type="number" id="ui_temp_min" step="0.5" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none focus:border-blue-500">
                 </div>
 
                 <div class="flex flex-col">
                     <label class="text-xs text-emerald-400 font-bold mb-1 uppercase">Alvo (IR)</label>
-                    <input type="number" id="ui_temp_alvo" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none">
+                    <input type="number" id="ui_temp_alvo" class="bg-slate-900 rounded-lg px-3 py-2 border border-slate-700 w-20 text-xl font-mono text-white outline-none focus:border-emerald-500">
                 </div>
 
-                <div class="flex flex-col flex-1 min-w-[150px]">
+                <div class="flex flex-col flex-1 min-w-[120px]">
                     <label class="text-xs text-slate-400 font-bold mb-1 uppercase">Marca Ativa</label>
-                    <select id="ui_marca" class="bg-slate-900 text-white rounded-lg px-3 py-3 border border-slate-700 outline-none w-full">
+                    <select id="ui_marca" class="bg-slate-900 text-white rounded-lg px-3 py-3 border border-slate-700 outline-none w-full focus:border-emerald-500">
                         <option value="LG">LG</option>
                         <option value="SAMSUNG">SAMSUNG</option>
                         <option value="MIDEA">MIDEA</option>
+                        <option value="DAIKIN">DAIKIN</option>
+                    </select>
+                </div>
+
+                <!-- NOVO: MODO TESTE TV -->
+                <div class="flex flex-col flex-1 min-w-[150px]">
+                    <label class="text-xs text-purple-400 font-bold mb-1 uppercase">Modo Teste (TV)</label>
+                    <select id="ui_modo_teste" class="bg-slate-900 text-purple-200 rounded-lg px-3 py-3 border border-slate-700 outline-none w-full focus:border-purple-500">
+                        <option value="false">Desativado (AC Normal)</option>
+                        <option value="true">Ativado (TV LG)</option>
                     </select>
                 </div>
             </div>
@@ -45,82 +55,195 @@
             </button>
         </div>
 
-        <!-- 2. GRÁFICO E LOGS -->
-        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg h-96">
-            <canvas id="temperaturaChart"></canvas>
+        <!-- 2. GRÁFICO DE TEMPERATURA -->
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-lg h-96 relative">
+            <h2 class="absolute top-4 left-6 text-slate-400 font-bold">Evolução Térmica</h2>
+            <canvas id="temperaturaChart" class="mt-4"></canvas>
         </div>
 
-        <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 h-64 overflow-y-auto font-mono text-sm" id="logs_container">
-            <div class="text-slate-500">Carregando telemetria...</div>
+        <!-- 3. LOGS DO SISTEMA -->
+        <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4 h-64 overflow-y-auto font-mono text-sm shadow-inner">
+            <h3 class="text-slate-400 font-bold mb-3 border-b border-slate-700 pb-2">Logs de Telemetria (ESP32)</h3>
+            <div id="logs_container" class="space-y-2">
+                <div class="text-slate-500">A aguardar dados do ESP32...</div>
+            </div>
         </div>
     </div>
 
     <script>
         let graficoTemp;
 
+        // Inicia o Chart.js vazio
         function inicializarGrafico() {
             const ctx = document.getElementById('temperaturaChart').getContext('2d');
             graficoTemp = new Chart(ctx, {
                 type: 'line',
-                data: { labels: [], datasets: [{ data: [], borderColor: '#10b981', fill: true }] },
-                options: { responsive: true, maintainAspectRatio: false }
+                data: { 
+                    labels: [], 
+                    datasets: [{ 
+                        label: 'Temperatura (°C)',
+                        data: [], 
+                        borderColor: '#10b981', 
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#10b981',
+                        pointRadius: 5,
+                        fill: true,
+                        tension: 0.3
+                    }] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { 
+                            suggestedMin: 18, 
+                            suggestedMax: 30,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
             });
         }
 
-        // Busca a configuração atual que o ESP32 está usando
+        // Lê a configuração inicial para preencher os inputs
         async function carregarDadosAtuais() {
-            const res = await fetch('/api/getConfig');
-            if (res.ok) {
-                const config = await res.json();
-                document.getElementById('ui_temp_max').value = config.alerta;
-                document.getElementById('ui_temp_min').value = config.desligar;
-                document.getElementById('ui_temp_alvo').value = config.alvo;
-                document.getElementById('ui_marca').value = config.marca;
+            try {
+                const res = await fetch('/api/getConfig');
+                if (res.ok) {
+                    const config = await res.json();
+                    if (!config.erro) {
+                        document.getElementById('ui_temp_max').value = config.alerta;
+                        document.getElementById('ui_temp_min').value = config.desligar;
+                        document.getElementById('ui_temp_alvo').value = config.alvo;
+                        document.getElementById('ui_marca').value = config.marca;
+                        if (config.modo_teste !== undefined) {
+                            document.getElementById('ui_modo_teste').value = config.modo_teste ? "true" : "false";
+                        }
+                    }
+                }
+            } catch (e) { console.error("Erro ao carregar configurações", e); }
+        }
+
+        // Envia as alterações para o backend
+        async function salvarConfiguracao() {
+            const payloadConfig = {
+                marca: document.getElementById('ui_marca').value,
+                temp_max: parseFloat(document.getElementById('ui_temp_max').value),
+                temp_min: parseFloat(document.getElementById('ui_temp_min').value),
+                temp_alvo: parseInt(document.getElementById('ui_temp_alvo').value),
+                modo_teste: document.getElementById('ui_modo_teste').value === "true" // Envia true ou false para o Python
+            };
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payloadConfig)
+                });
+                if(res.ok) {
+                    alert("Configuração aplicada com sucesso! O ESP32 irá atualizar em breve.");
+                }
+            } catch (e) {
+                alert("Erro ao guardar configuração.");
             }
         }
 
-        // Salva a nova configuração no catálogo e define como estado atual
-        async function salvarConfiguracao() {
-            const marca = document.getElementById('ui_marca').value;
-            const payloadConfig = {
-                marca: marca,
-                temp_max: parseInt(document.getElementById('ui_temp_max').value),
-                temp_min: parseInt(document.getElementById('ui_temp_min').value),
-                temp_alvo: parseInt(document.getElementById('ui_temp_alvo').value)
-            };
-
-            // 1. Atualiza o catálogo
-            await fetch('/api/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payloadConfig)
-            });
-
-            // 2. Define esta marca como a ativa
-            await fetch('/api/estado', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ marca: marca })
-            });
-
-            alert("Configuração aplicada com sucesso!");
+        // Atualiza os Logs de Texto
+        async function carregarLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                if (res.ok) {
+                    const logs = await res.json();
+                    if(logs.length > 0) {
+                        document.getElementById('logs_container').innerHTML = logs.map(l => {
+                            let corLog = "text-slate-300";
+                            if(l.log.includes("LIGANDO AC")) corLog = "text-red-400 font-bold";
+                            if(l.log.includes("DESLIGANDO AC")) corLog = "text-blue-400 font-bold";
+                            if(l.log.includes("TESTE:")) corLog = "text-purple-400 font-bold";
+                            
+                            return `<div class="border-b border-slate-800 pb-1">
+                                <span class="text-slate-500">[${l.timestamp || '--:--'}]</span> 
+                                <span class="${corLog}">${l.log}</span>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            } catch (e) {}
         }
 
-        async function carregarLogs() {
-            const res = await fetch('/api/logs');
-            if (res.ok) {
-                const logs = await res.json();
-                document.getElementById('logs_container').innerHTML = logs.map(l => 
-                    `<div>[${l.timestamp}] ${l.log}</div>`
-                ).join('');
+        // Atualiza a Linha do Gráfico (Com filtro de 5 em 5 minutos)
+        async function carregarHistorico() {
+            try {
+                const res = await fetch('/api/historico');
+                if (res.ok) {
+                    const dados = await res.json();
+                    
+                    const labelsFiltradas = [];
+                    const tempsFiltradas = [];
+                    let ultimoTempoMs = -1;
+
+                    for (let i = 0; i < dados.labels.length; i++) {
+                        const label = dados.labels[i];
+                        const temp = dados.temperaturas[i];
+                        
+                        if (!label) continue;
+
+                        const partes = label.split(':');
+                        if (partes.length < 2) continue;
+                        
+                        const horas = parseInt(partes[0], 10);
+                        const minutos = parseInt(partes[1], 10);
+                        const segundos = partes.length > 2 ? parseInt(partes[2], 10) : 0;
+                        
+                        const tempoMs = (horas * 3600 + minutos * 60 + segundos) * 1000;
+
+                        let diff = tempoMs - ultimoTempoMs;
+                        if (diff < 0) diff += 24 * 3600 * 1000;
+
+                        if (ultimoTempoMs === -1 || diff >= 300000) {
+                            labelsFiltradas.push(label);
+                            tempsFiltradas.push(temp ? temp : 0);
+                            ultimoTempoMs = tempoMs;
+                        }
+                    }
+
+                    if (dados.labels.length > 0) {
+                        const ultimoLabel = dados.labels[dados.labels.length - 1];
+                        if (labelsFiltradas[labelsFiltradas.length - 1] !== ultimoLabel) {
+                            labelsFiltradas.push(ultimoLabel ? ultimoLabel : "--:--:--");
+                            tempsFiltradas.push(dados.temperaturas[dados.temperaturas.length - 1] || 0);
+                        }
+                    }
+
+                    if (labelsFiltradas.length > 0) {
+                        graficoTemp.data.labels = labelsFiltradas;
+                        graficoTemp.data.datasets[0].data = tempsFiltradas;
+                        graficoTemp.update();
+                    }
+                }
+            } catch (e) {
+                console.error("Erro gráfico:", e);
             }
         }
 
         window.onload = () => {
             inicializarGrafico();
             carregarDadosAtuais();
+            
             carregarLogs();
-            setInterval(carregarLogs, 5000);
+            carregarHistorico();
+            
+            setInterval(() => {
+                carregarLogs();
+                carregarHistorico();
+            }, 5000);
         };
     </script>
 </body>

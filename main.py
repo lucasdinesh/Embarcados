@@ -7,6 +7,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 app = FastAPI()
 
@@ -162,7 +164,7 @@ def receber_telemetria(dados: TelemetriaPayload):
     cursor.execute('''
         INSERT INTO telemetria (temperatura, ar_ligado, acao, log, timestamp) 
         VALUES (?, ?, ?, ?, ?)
-    ''', (dados.temperatura, dados.ar_ligado, dados.acao, dados.log, datetime.now().strftime("%H:%M:%S")))
+    ''', (dados.temperatura, dados.ar_ligado, dados.acao, dados.log, datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M:%S")))
     
     conn.commit()
     conn.close()
